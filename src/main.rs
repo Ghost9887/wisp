@@ -29,6 +29,7 @@ enum Command {
     MoveRight,
     InsertChar(char),
     NewLine,
+    NewLineO,
     BackSpace,
     Delete,
     EnterInsertMode,
@@ -168,6 +169,12 @@ fn main() {
             Command::EnterNormalMode => {
                 global.mode = Mode::Normal;
             },
+            Command::NewLineO => {
+                let cur_row = global.cursor.row;
+                global.lines.insert(cur_row + 1, Line {chars: Vec::new() });
+                global.move_down(view.height);
+                global.mode = Mode::Insert;
+            },
             Command::NewLine => {
                 let cur_row = global.cursor.row;
                 let cur_col = global.cursor.col;
@@ -264,6 +271,7 @@ fn map_key(key: Key, mode: Mode) -> Command {
                 Key::Char('l') => Command::MoveRight,
                 Key::Char('a') => Command::EnterInsertMode,
                 Key::Char('x') => Command::Delete,
+                Key::Char('o') => Command::NewLineO,
                 _ => Command::NoOp,
             }
         },
