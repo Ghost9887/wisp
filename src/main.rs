@@ -70,9 +70,8 @@ impl Global {
             self.reset_cursor();
         }    
     }
-    fn move_down(&mut self, th: u16) {
-        if self.cursor.row + 1 < self.lines.len() &&
-            self.cursor.row + 1 < (th - BOTTOM_PADDING) as usize{
+    fn move_down(&mut self) {
+        if self.cursor.row + 1 < self.lines.len(){
             self.cursor.row += 1;
             self.reset_cursor();
         }
@@ -97,16 +96,18 @@ impl Global {
 struct View {
     width: u16,
     height: u16,
-    scroll: usize,
+    //holds the start line in view currently
+    start: usize,
 }
 impl View {
-    fn update_scroll(&mut self, cursor: &Cursor) {
-        if cursor.row as u16 >= self.height - BOTTOM_PADDING  {
-            self.scroll += 1;
+    fn update_scroll(&mut self, global: &mut Global) {
+        let cur_row = global.cursor.row + 1;
+        if cur_row >= self.height as usize - BOTTOM_PADDING as usize + self.start {
+            self.start += 1;
         }
-        else if cursor.row <= 0 && self.scroll > 1{
-            self.scroll -= 1;
-        }  
+        else if cur_row < self.start && self.start > 1{
+            self.start -= 1;
+        }
     }
 }
 
@@ -120,7 +121,7 @@ fn main() {
     let mut view = View {
         width,
         height,
-        scroll: 1,
+        start: 1,
     };
     let mut global = Global { 
         lines: Vec::new(), 
@@ -133,7 +134,7 @@ fn main() {
 
     //main loop
     loop {
-        let _ = print_tui(&mut global, &view, &mut stdout).unwrap();
+        let _ = print_tui(&mut global, &mut view, &mut stdout).unwrap();
 
         let c = io::stdin().keys().next();
         let key = match c {
@@ -150,11 +151,9 @@ fn main() {
             Command::Quit => break,
             Command::MoveUp => {
                 global.move_up();
-                view.update_scroll(&global.cursor);
             },
             Command::MoveDown => {
-                global.move_down(view.height);
-                view.update_scroll(&global.cursor);
+                global.move_down();
             },
             Command::MoveLeft => global.move_left(),
             Command::MoveRight => global.move_right(),
@@ -172,7 +171,7 @@ fn main() {
             Command::NewLineO => {
                 let cur_row = global.cursor.row;
                 global.lines.insert(cur_row + 1, Line {chars: Vec::new() });
-                global.move_down(view.height);
+                global.move_down();
                 global.mode = Mode::Insert;
             },
             Command::NewLine => {
@@ -181,13 +180,13 @@ fn main() {
                 //fresh line
                 if cur_col >= global.current_line().len() {
                     global.lines.insert(cur_row + 1, Line{ chars: Vec::new() });
-                    global.move_down(view.height);
+                    global.move_down();
                 }
                 //spliced line
                 else {
                     let new_line_vec = &mut global.current_line().chars.split_off(cur_col);
                     global.lines.insert(cur_row + 1, Line{ chars: Vec::new() });
-                    global.move_down(view.height);
+                    global.move_down();
                     global.current_line().chars.append(new_line_vec); 
                 }
             },
@@ -220,41 +219,48 @@ fn main() {
 
 }
 
-//TODO: scrolling
-fn print_tui(global: &mut Global, view: &View, stdout: &mut Stdout) -> io::Result<()>{
-
+fn print_tui(global: &mut Global, view: &mut View, stdout: &mut Stdout) -> io::Result<()>{
+    view.update_scroll(global);
     write!(stdout, "{}", clear::All)?;
     write!(stdout, "{}", cursor::Goto(1, view.height))?;
     write!(stdout, "{:?}", global.mode)?;
-    write!(stdout, "{}{}|{}", cursor::Goto(view.width - 5, view.height), global.cursor.col as usize + 1, global.cursor.row + 1)?;
+    //print the view.start for debugging
+    write!(stdout, "{}", cursor::Goto(10, view.height))?;
+    write!(stdout, "start: {}", view.start)?;
+
+    write!(stdout, "{}{}|{}", cursor::Goto(view.width - 5, view.height), 
+        global.cursor.col as usize + 1, global.cursor.row + 1)?;
     print_lines(view, global, stdout);
     print_content(view, global, stdout);
-    write!(stdout, "{}", cursor::Goto(global.cursor.col as u16 + LEFT_PADDING + 1, global.cursor.row as u16 + 1))?;
+    
+    let cur_row = global.cursor.row as u16 + 1 - view.start as u16 + 1;
+    write!(stdout, "{}", cursor::Goto(global.cursor.col as u16 + LEFT_PADDING + 1, 
+    cur_row))?;
 
     stdout.flush()?;
 
     Ok(())
 }
 
-fn print_lines(view: &View, global: &mut Global, stdout: &mut Stdout) {
+fn print_lines(view: &mut View, global: &mut Global, stdout: &mut Stdout) {
     let max = cmp::min(view.height - BOTTOM_PADDING, global.amount_of_lines() as u16);
-    for i in view.scroll..=max as usize {
-        write!(stdout, "{}", cursor::Goto(1, i as u16)).unwrap();
-        write!(stdout, "{}", i).unwrap();
-        write!(stdout, "{}", cursor::Goto(LEFT_PADDING as u16, i as u16)).unwrap();
+    for i in 0..max as usize {
+        write!(stdout, "{}", cursor::Goto(1, i as u16 + 1)).unwrap();
+        write!(stdout, "{}", i + view.start).unwrap();
+        write!(stdout, "{}", cursor::Goto(LEFT_PADDING as u16, i as u16 + 1)).unwrap();
         write!(stdout, "{}", '|').unwrap();
     }
 }
 
-fn print_content(view: &View, global: &mut Global, stdout: &mut Stdout) {
-    let max = cmp::min(global.amount_of_lines(), view.height as usize);
-    for i in view.scroll - 1..max {
+fn print_content(view: &mut View, global: &mut Global, stdout: &mut Stdout) {
+    let max = view.height as usize - BOTTOM_PADDING as usize + view.start as usize;
+    for i in view.start - 1..max - 1{
         let line = match global.lines.get(i){
             Some(l) => l,
             None => break,
         };
         for (j, char) in line.chars.iter().enumerate() {
-            write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1)).unwrap();
+            write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
             write!(stdout, "{}", char).unwrap();
         }
     }
@@ -285,8 +291,4 @@ fn map_key(key: Key, mode: Mode) -> Command {
             }
         },
     }
-}
-
-
-
-
+} 
