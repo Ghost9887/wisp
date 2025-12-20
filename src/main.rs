@@ -27,6 +27,7 @@ enum Command {
     MoveDown,
     MoveLeft,
     MoveRight,
+    MoveToNextStart,
     InsertChar(char),
     NewLine,
     NewLineO,
@@ -91,6 +92,11 @@ impl Global {
             self.cursor.col = self.current_line().len();
         }
     }
+    fn current_char(&mut self) -> Option<char> {
+        let cur_col = self.cursor.col;
+        let char = self.current_line().chars.get(cur_col);
+        char.copied()
+    }
 }
 
 struct View {
@@ -146,7 +152,6 @@ fn main() {
         };
 
         let cmd: Command = map_key(key, global.mode);
-
         match cmd {
             Command::Quit => break,
             Command::MoveUp => {
@@ -157,6 +162,9 @@ fn main() {
             },
             Command::MoveLeft => global.move_left(),
             Command::MoveRight => global.move_right(),
+            Command::MoveToNextStart => {
+                //TODO:
+            }
             Command::InsertChar(c) => {
                 let cur_col = global.cursor.col;
                 global.current_line().chars.insert(cur_col, c);
@@ -199,11 +207,13 @@ fn main() {
                     let cur_row = global.cursor.row;
                     if cur_row > 0 {
                         let mut temp: Vec<char> = global.lines[cur_row].chars.clone();
+                        let temp_len = temp.len();
                         global.lines.remove(cur_row);
                         global.move_up();
                         global.current_line().chars.append(&mut temp);
-                        //TODO: Make it so we end up on the end of the line above not the
-                        //start(problem in move_up fn)
+                        if temp_len < global.current_line().len() {
+                            global.cursor.col = global.current_line().len() - temp_len;
+                        }
                     }
                 }
             },
@@ -278,6 +288,7 @@ fn map_key(key: Key, mode: Mode) -> Command {
                 Key::Char('a') => Command::EnterInsertMode,
                 Key::Char('x') => Command::Delete,
                 Key::Char('o') => Command::NewLineO,
+                Key::Char('w') => Command::MoveToNextStart,
                 _ => Command::NoOp,
             }
         },
