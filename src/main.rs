@@ -163,7 +163,40 @@ fn main() {
             Command::MoveLeft => global.move_left(),
             Command::MoveRight => global.move_right(),
             Command::MoveToNextStart => {
-                //TODO:
+                let mut end = false; 
+                let mut start = false;
+                let space_symbols = vec!['\n', ' ', '\t'];
+                let special_symbols = vec!['{', '}', '(', ')', ',', '[', ']', '"', '.'];
+                let mut counter = 0;
+                while counter < 100 && !start {
+                    let char = match global.current_char() {
+                        Some(c) => c,
+                        None => break,
+                    };
+                    if special_symbols.contains(&char) && counter > 0{
+                        break;
+                    }
+                    if space_symbols.contains(&char) {
+                        end = true;
+                    }
+                    if !space_symbols.contains(&char) && end {
+                        start = true;
+                        break;
+                    }
+                    if global.cursor.col + 1 >= global.current_line().len() && 
+                        global.cursor.row + 1 >= global.amount_of_lines() {
+                        break;
+                    }
+                    else if global.cursor.col + 1 >= global.current_line().len() {
+                        global.move_down();
+                        global.cursor.col = 0;
+                        counter += 1;
+                    }
+                    else {
+                        global.move_right();
+                        counter += 1;
+                    }
+                }
             }
             Command::InsertChar(c) => {
                 let cur_col = global.cursor.col;
@@ -178,6 +211,7 @@ fn main() {
             },
             Command::NewLineO => {
                 let cur_row = global.cursor.row;
+                 global.current_line().chars.push('\n');
                 global.lines.insert(cur_row + 1, Line {chars: Vec::new() });
                 global.move_down();
                 global.mode = Mode::Insert;
@@ -187,12 +221,14 @@ fn main() {
                 let cur_col = global.cursor.col;
                 //fresh line
                 if cur_col >= global.current_line().len() {
+                    global.current_line().chars.push('\n');
                     global.lines.insert(cur_row + 1, Line{ chars: Vec::new() });
                     global.move_down();
                 }
                 //spliced line
                 else {
                     let new_line_vec = &mut global.current_line().chars.split_off(cur_col);
+                    global.current_line().chars.push('\n');
                     global.lines.insert(cur_row + 1, Line{ chars: Vec::new() });
                     global.move_down();
                     global.current_line().chars.append(new_line_vec); 
@@ -234,12 +270,8 @@ fn print_tui(global: &mut Global, view: &mut View, stdout: &mut Stdout) -> io::R
     write!(stdout, "{}", clear::All)?;
     write!(stdout, "{}", cursor::Goto(1, view.height))?;
     write!(stdout, "{:?}", global.mode)?;
-    //print the view.start for debugging
-    write!(stdout, "{}", cursor::Goto(10, view.height))?;
-    write!(stdout, "start: {}", view.start)?;
-
     write!(stdout, "{}{}|{}", cursor::Goto(view.width - 5, view.height), 
-        global.cursor.col as usize + 1, global.cursor.row + 1)?;
+    global.cursor.col as usize + 1, global.cursor.row + 1)?;
     print_lines(view, global, stdout);
     print_content(view, global, stdout);
     
@@ -270,8 +302,13 @@ fn print_content(view: &mut View, global: &mut Global, stdout: &mut Stdout) {
             None => break,
         };
         for (j, char) in line.chars.iter().enumerate() {
-            write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
-            write!(stdout, "{}", char).unwrap();
+            if *char == '\n' {
+                write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
+                write!(stdout, "{}", '~').unwrap();
+            }else {
+                write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
+                write!(stdout, "{}", char).unwrap();
+            }
         }
     }
 }
