@@ -17,8 +17,8 @@ const LEFT_PADDING: u16 = 7;
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
-    Insert,
-    Normal,
+   Insert,
+   Normal
 }
 
 #[derive(Debug)]
@@ -29,6 +29,7 @@ enum Command {
     MoveRight,
     Tab,
     MoveToNextStart,
+	MoveToPrevEnd,
     InsertChar(char),
     NewLine,
     NewLineO,
@@ -142,7 +143,6 @@ fn main() {
     //main loop
     loop {
         let _ = print_tui(&mut global, &mut view, &mut stdout).unwrap();
-
         let c = io::stdin().keys().next();
         let key = match c {
             Some(c) => match c {
@@ -151,7 +151,6 @@ fn main() {
             },
             None => continue,
         };
-
         let cmd: Command = map_key(key, global.mode);
         match cmd {
             Command::Quit => break,
@@ -163,6 +162,43 @@ fn main() {
             },
             Command::MoveLeft => global.move_left(),
             Command::MoveRight => global.move_right(),
+			Command::MoveToPrevEnd => {
+				let mut end = false; 
+                let mut start = false;
+                let space_symbols = vec!['\n', ' ', '\t'];
+                let special_symbols = vec!['{', '}', '(', ')', ',', '[', ']', '"', '.'];
+                let mut counter = 0;
+                while counter < 100 && !start {
+                    let char = match global.current_char() {
+                        Some(c) => c,
+                        None => break,
+                    };
+                    if special_symbols.contains(&char) && counter > 0{
+                        break;
+                    }
+                    if space_symbols.contains(&char) {
+                        end = true;
+                    }
+                    if !space_symbols.contains(&char) && end {
+                        start = true;
+                        break;
+                    }
+                    if global.cursor.col < 1 && 
+                        global.cursor.row < 1 {
+                        break;
+                    }
+                    else if global.cursor.col < 1 {
+                        global.move_up();
+                        global.cursor.col = global.current_line().len() - 1;
+                        counter += 1;
+                    }
+                    else {
+                        global.move_left();
+                        counter += 1;
+                    }
+                }
+
+			}
             Command::MoveToNextStart => {
                 let mut end = false; 
                 let mut start = false;
@@ -219,7 +255,7 @@ fn main() {
             },
             Command::NewLineO => {
                 let cur_row = global.cursor.row;
-                 global.current_line().chars.push('\n');
+                global.current_line().chars.push('\n');
                 global.lines.insert(cur_row + 1, Line {chars: Vec::new() });
                 global.move_down();
                 global.mode = Mode::Insert;
@@ -270,7 +306,6 @@ fn main() {
             Command::NoOp => continue,
         }
     }
-
 }
 
 fn print_tui(global: &mut Global, view: &mut View, stdout: &mut Stdout) -> io::Result<()>{
@@ -337,18 +372,19 @@ fn map_key(key: Key, mode: Mode) -> Command {
                 Key::Char('x') => Command::Delete,
                 Key::Char('o') => Command::NewLineO,
                 Key::Char('w') => Command::MoveToNextStart,
+				Key::Char('b') => Command::MoveToPrevEnd,
                 _ => Command::NoOp,
             }
         },
         Mode::Insert => {
             match key {
-                Key::Char('\n') => Command::NewLine,
-                Key::Backspace => Command::BackSpace,
-                Key::Esc => Command::EnterNormalMode,
-                Key::Char('\t') => Command::Tab,
-                Key::Char(char) => Command::InsertChar(char),
+		Key::Char('\n') => Command::NewLine,
+		Key::Backspace => Command::BackSpace,
+		Key::Esc => Command::EnterNormalMode,
+		Key::Char('\t') => Command::Tab,
+		Key::Char(char) => Command::InsertChar(char),
                 _ => Command::NoOp,
             }
         },
     }
-} 
+}
