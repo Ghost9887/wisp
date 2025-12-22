@@ -27,6 +27,7 @@ enum Command {
     MoveDown,
     MoveLeft,
     MoveRight,
+    Tab,
     MoveToNextStart,
     InsertChar(char),
     NewLine,
@@ -203,6 +204,13 @@ fn main() {
                 global.current_line().chars.insert(cur_col, c);
                 global.move_right();
             },
+            Command::Tab => {
+                for _ in 0..4 {
+                    let cur_col = global.cursor.col;
+                    global.current_line().chars.insert(cur_col, '\t');
+                    global.move_right();
+                }
+            },
             Command::EnterInsertMode => {
                 global.mode = Mode::Insert;
             },
@@ -302,11 +310,14 @@ fn print_content(view: &mut View, global: &mut Global, stdout: &mut Stdout) {
             None => break,
         };
         for (j, char) in line.chars.iter().enumerate() {
+             write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
             if *char == '\n' {
-                write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
-                write!(stdout, "{}", '~').unwrap();
-            }else {
-                write!(stdout, "{}", cursor::Goto(j as u16 + LEFT_PADDING + 1, i as u16 + 1 - view.start as u16 + 1)).unwrap();
+                write!(stdout, "{}", '→').unwrap();
+            }
+            else if *char == '\t' {
+                write!(stdout, "{}", '-').unwrap();
+            } 
+            else {
                 write!(stdout, "{}", char).unwrap();
             }
         }
@@ -334,6 +345,7 @@ fn map_key(key: Key, mode: Mode) -> Command {
                 Key::Char('\n') => Command::NewLine,
                 Key::Backspace => Command::BackSpace,
                 Key::Esc => Command::EnterNormalMode,
+                Key::Char('\t') => Command::Tab,
                 Key::Char(char) => Command::InsertChar(char),
                 _ => Command::NoOp,
             }
